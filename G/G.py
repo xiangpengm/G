@@ -65,7 +65,7 @@ def response_for_request(request, route_map):
     log('request path:', request.path)
     response = route_map.get(request.path, error)
     # 动态调用函数的例子
-    return response()
+    return response(request)
 
 
 def request_from_connection(connection):
@@ -101,9 +101,9 @@ def process_connection(connection, route_map):
 class G(object):
 
     def __init__(self):
-        pass
+        self.route_map = {}
 
-    def run(self, host, port, route_map):
+    def run(self, host, port):
         # 使用with可以保证终端的时候正确关闭socket释放占用的端口
         with socket.socket() as s:
             # 回收不用的端口
@@ -117,8 +117,15 @@ class G(object):
 
             while True:
                 connection, address = s.accept()
-                # 获取到请求
+                # 获取到请求 
                 # 因为chrome会发送空请求导致split得到空的list
                 # 所以这里先判断一下split得到的数据的长度
                 # process_connection(connection, route_map)
-                _thread.start_new_thread(process_connection, (connection, route_map))
+                _thread.start_new_thread(process_connection, (connection, self.route_map))
+
+    def route(self, path):
+        print('arg', path)
+        def a(func):
+            self.route_map[path] = func
+        return a
+        # return a

@@ -5,7 +5,8 @@ from G import html_content
 g = G()
 
 
-def route_index():
+@g.route('/')
+def route_index(request):
     """
     主页的处理函数, 返回主页的响应
     :return:
@@ -17,7 +18,8 @@ def route_index():
     return r.encode()
 
 
-def route_message():
+@g.route('/message')
+def route_message(request):
     """
     主页的处理函数, 返回主页的响应
     """
@@ -27,7 +29,8 @@ def route_message():
     return r.encode()
 
 
-def route_image():
+@g.route('/doge.gif')
+def route_image(request):
     """
     图片的处理函数, 读取图片并生成响应返回
     """
@@ -37,22 +40,11 @@ def route_image():
         return image
 
 
-def route_dict():
-    route_map = {
-        '/': route_index,
-        '/message': route_message,
-        '/doge.gif': route_image,
-    }
-    return route_map
-
 if __name__ == "__main__":
-    # 这里面只能传路由映射还没有实现传参的功能
-    route_map = route_dict()
     # 配置服务器
     config = dict(
         host='0.0.0.0',
         port=3000,
-        route_map=route_map
     )
     # 运行服务器
     g.run(**config)
