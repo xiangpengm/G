@@ -1,31 +1,67 @@
+import os
 import socket
 import urllib.parse
-
 import _thread
 
 from .utils import log
+from jinja2 import Environment, FileSystemLoader
+
 
 class Request():
 
-    def __init__(self):
-        self.raw_data = ''
-        self.method = ''
-        self.path = ''
-        self.query = {}
-        self.body = ''
+    def __init__(self, r):
+        self.raw_data = r
+        header, self.body = r.split('\r\n\r\n', 1)
+        h = header.split('\r\n')
+        parts = h[0].split()
+        log(parts)
+        self.path = parts[1]
+        log('path', self.path)
+        self.method = parts[0]
+        self.path, self.query = self.parsed_path(self.path)
+        self.headers = {}
+        self.cookies = {}
+
+    def add_headers(self, header):
+        """
+        Cookie: user=gua
+        """
+        lines = header
+        for line in lines:
+            k, v = line.split(': ', 1)
+            self.headers[k] = v
+
+        if 'Cookie' in self.headers:
+            cookies = self.headers['Cookie']
+            k, v = cookies.split('=')
+            self.cookies[k] = v
 
     def form(self):
         body = urllib.parse.unquote_plus(self.body)
-        log('form', self.body)
-        log('form', body)
+        # log('form', self.body)
+        # log('form', body)
         args = body.split('&')
         f = {}
-        log('args', args)
+        # log('args', args)
         for arg in args:
             k, v = arg.split('=')
             f[k] = v
-        log('form() 字典', f)
+        # log('form() 字典', f)
         return f
+
+    def parsed_path(self, path):
+        index = path.find('?')
+        if index == -1:
+            return path, {}
+        else:
+            query_string = path[index + 1:]
+            p = path[:index]
+            args = query_string.split('&')
+            query = {}
+            for arg in args:
+                k, v = arg.split('=')
+                query[k] = v
+            return p, query
 
 
 def html_content(path):
@@ -43,7 +79,7 @@ def error(code=404):
     e = {
         404: b'HTTP/1.1 404 NOT FOUND\r\nContent-Type: text/html\r\n\r\n<h1>404 Not Found</h1>'
     }
-    return e.get(code, '')
+    return e.get(code, b'')
 
 
 def response_for_request(request, route_map):
@@ -62,9 +98,15 @@ def response_for_request(request, route_map):
     #     '/message': route_message,
     #     '/doge.gif': route_image,
     #
-    log('request path:', request.path)
+    # 处理path query
+    # log('request path:', request.path)
+    # request.path, request.query = parsed_path(request.path)
+    log('request query', request.query)
     response = route_map.get(request.path, error)
     # 动态调用函数的例子
+    log('route func name: ', response.__name__)
+
+    # 在这里执行回调函数
     return response(request)
 
 
@@ -83,13 +125,7 @@ def process_connection(connection, route_map):
     with connection:
         r = request_from_connection(connection)
         if len(r) > 0:
-            request = Request()
-            request.raw_data = r
-            header, request.body = r.split('\r\n\r\n', 1)
-            h = header.split('\r\n')
-            parts = h[0].split()
-            request.path = parts[1]
-            request.method = parts[0]
+            request = Request(r)
             # 用response_for_path 函数来得到path对应的响应内容
             response = response_for_request(request, route_map)
             # 把响应发送给客户端
@@ -98,9 +134,38 @@ def process_connection(connection, route_map):
             log('接收到一个空请求')
 
 
+def response_with_headers(headers, code=200):
+    """
+    Content-Type: text/html
+    Set-Cookie: user=gua
+    """
+    header = 'HTTP/1.x {} VERY OK\r\n'.format(code)
+    header += ''.join([
+        '{}: {}\r\n'.format(k, v) for k, v in headers.items()
+    ])
+    return header
+
+
+def redirect(url):
+    """
+    浏览器在收到 302 响应的时候
+    会自动在 HTTP header 里面找 Location 字段并获取一个 url
+    然后自动请求新的 url
+    """
+    headers = {
+        'Location': url,
+    }
+    # 增加 Location 字段并生成 HTTP 响应返回
+    # 注意, 没有 HTTP body 部分
+    r = response_with_headers(headers, 302) + '\r\n'
+    return r.encode()
+
+
 class G(object):
 
-    def __init__(self):
+    def __init__(self, file_path):
+        path = os.path.join(os.path.dirname(file_path), 'templates')
+        self.jinja_env = Environment(loader=FileSystemLoader(path))
         self.route_map = {}
 
     def run(self, host, port):
@@ -113,7 +178,7 @@ class G(object):
 
             # 监听接受读取请求数据解码成字符串
             s.listen()
-            log('start server ip: {} port: {}'.format(host, port))
+            log('start server ip: http://{}:{}'.format(host, port))
 
             while True:
                 connection, address = s.accept()
@@ -124,8 +189,16 @@ class G(object):
                 _thread.start_new_thread(process_connection, (connection, self.route_map))
 
     def route(self, path):
-        print('arg', path)
-        def a(func):
+        def wrap(func):
             self.route_map[path] = func
-        return a
-        # return a
+        return wrap
+
+
+    def render_templates(self, name, **kwargs):
+        temp = self.jinja_env.get_template(name)
+        return temp.render(**kwargs)
+
+
+    def render_string(self, template, **kwargs):
+        temp = self.jinja_env.from_string(template)
+        return temp.render(**kwargs)

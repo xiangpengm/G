@@ -10,10 +10,10 @@ setuptools.setup(
     version=version,
     author="wangxiangpeng",
     author_email="xiangpengm@126.com",
-    description='A Wechat pay package',
+    description='A web framework package',
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://bitbucket.org/xiangpengm/WXPay",
+    url="https://github.com/xiangpengm/G",
     packages=setuptools.find_packages(),
     python_requires='>=3.6',
     classifiers=(
@@ -22,8 +22,7 @@ setuptools.setup(
     ),
     install_requires=[
         'requests',
-        'flask',
-        'xmltodict',
+        'jinja2',
     ],
 
 )
